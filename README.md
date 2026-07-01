@@ -256,39 +256,35 @@ streamlit run app.py
 
 ### Dashboard
 
-*(Add screenshot here)*
+![Dashboard](images/Dashboard.jpeg)
 
 ---
 
 ### Prediction Page
 
-*(Add screenshot here)*
+![Predict](images/Predict.jpeg)
 
 ---
 
 ### Analytics
 
-*(Add screenshot here)*
+![Analytics](images/Analytics.jpeg)
 
 ---
 
 ### Model Performance
 
-*(Add screenshot here)*
+![Model](images/Model.jpeg)
 
 ---
 
 ## 🔮 Future Improvements
 
-- XGBoost Model
-- LightGBM
 - Hyperparameter Optimization
-- SHAP Explainability
 - Customer Segmentation
 - Cloud Deployment
 - Live Database Integration
-- REST API using FastAPI
-
+- Extracting data by using SQL Queries
 ---
 
 ## 👩‍💻 Developed By
