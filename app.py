@@ -1,4 +1,6 @@
 import streamlit as st
+import shap
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import joblib
@@ -262,7 +264,6 @@ elif page == "Predict":
     """)
 
             elif probability >= 0.50:
-
                 st.warning("""
     ### 🟠 Medium Risk
 
@@ -272,7 +273,6 @@ elif page == "Predict":
     """)
 
             else:
-
                 st.success("""
     ### 🟢 Low Risk
 
@@ -280,6 +280,77 @@ elif page == "Predict":
     - Continue Engagement
     - Recommend Premium Services
     """)
+
+            # ============================================================
+            # SHAP EXPLAINABILITY
+            # ============================================================
+            st.divider()
+            st.subheader("🔍 Why This Prediction?")
+
+            preprocessor = model.named_steps["preprocessor"]
+            classifier = model.named_steps["classifier"]
+
+            customer_transformed = preprocessor.transform(customer)
+
+            # Handle sparse matrix output from OneHotEncoder
+            if hasattr(customer_transformed, "toarray"):
+                customer_transformed = customer_transformed.toarray()
+
+            feature_names = preprocessor.get_feature_names_out()
+
+            explainer = shap.TreeExplainer(classifier)
+            shap_values = explainer.shap_values(customer_transformed)
+
+            if isinstance(shap_values, list):
+                sv = shap_values[1][0]
+            elif shap_values.ndim == 3:
+                sv = shap_values[0, :, 1]
+            else:
+                sv = shap_values[0]
+
+            shap_df = pd.DataFrame({
+                "Feature": feature_names,
+                "Impact": sv
+            })
+
+            shap_df["Feature"] = shap_df["Feature"].str.replace(
+                r"^(num__|cat__)", "", regex=True
+            )
+
+            shap_df["AbsImpact"] = shap_df["Impact"].abs()
+            top_factors = shap_df.sort_values("AbsImpact", ascending=False).head(6)
+
+            increases_risk = top_factors[top_factors["Impact"] > 0].sort_values("Impact", ascending=False)
+            decreases_risk = top_factors[top_factors["Impact"] < 0].sort_values("Impact")
+
+            col_a, col_b = st.columns(2)
+
+            with col_a:
+                st.markdown("**⬆️ Increasing Churn Risk**")
+                if len(increases_risk) > 0:
+                    for _, row in increases_risk.iterrows():
+                        st.write(f"• {row['Feature']}")
+                else:
+                    st.write("_None significant_")
+
+            with col_b:
+                st.markdown("**⬇️ Reducing Churn Risk**")
+                if len(decreases_risk) > 0:
+                    for _, row in decreases_risk.iterrows():
+                        st.write(f"• {row['Feature']}")
+                else:
+                    st.write("_None significant_")
+
+            fig_shap = px.bar(
+                top_factors.sort_values("Impact"),
+                x="Impact",
+                y="Feature",
+                orientation="h",
+                title="Feature Impact on This Prediction",
+                color="Impact",
+                color_continuous_scale=["#00CC96", "#EF553B"]
+            )
+            st.plotly_chart(fig_shap, use_container_width=True)
 
         except Exception as e:
             st.error(f"Prediction Error: {e}")

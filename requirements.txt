@@ -125,7 +125,7 @@ langcodes==3.4.0
 langsmith==0.3.45
 language_data==1.2.0
 libclang==18.1.1
-llvmlite==0.47.0
+llvmlite==0.48.0
 lxml==5.3.1
 marisa-trie==1.2.0
 Markdown==3.7
@@ -156,6 +156,7 @@ networkx==3.3
 nltk==3.9.1
 notebook==7.6.0
 notebook_shim==0.2.4
+numba==0.66.0
 numpy==2.2.6
 openai==1.68.2
 opencv-python==4.11.0.86
@@ -233,6 +234,7 @@ Send2Trash==2.1.0
 sentence-transformers==2.6.1
 sentencepiece==0.2.0
 setuptools==80.9.0
+shap==0.52.0
 shellingham==1.5.4
 six==1.16.0
 slicer==0.0.8

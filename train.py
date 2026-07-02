@@ -1,119 +1,202 @@
-import pandas as pd
-import numpy as np
-import joblib
 import os
-from sklearn.linear_model import LogisticRegression
+import joblib
+import pandas as pd
+
+from sklearn.model_selection import train_test_split
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
-    classification_report, confusion_matrix, roc_auc_score,
-    roc_curve, accuracy_score, precision_score, recall_score, f1_score
+    classification_report,
+    roc_auc_score,
+    accuracy_score,
+    confusion_matrix
 )
 
-# --- Paths ---
-DATA_DIR = r"C:\Users\Sruthi K\OneDrive\Desktop\Customer-Churn-Analytics\data"
-MODEL_DIR = r"C:\Users\Sruthi K\OneDrive\Desktop\Customer-Churn-Analytics\model"
+# ============================================================
+# PATHS
+# ============================================================
+
+DATA_PATH = "data/telecom_churn.csv"
+MODEL_DIR = "model"
+
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-# --- Load processed data ---
-X_train = pd.read_csv(os.path.join(DATA_DIR, "X_train.csv"))
-X_test = pd.read_csv(os.path.join(DATA_DIR, "X_test.csv"))
-y_train = pd.read_csv(os.path.join(DATA_DIR, "y_train.csv")).squeeze()
-y_test = pd.read_csv(os.path.join(DATA_DIR, "y_test.csv")).squeeze()
+# ============================================================
+# LOAD DATA
+# ============================================================
 
-print("Data loaded:", X_train.shape, X_test.shape)
+df = pd.read_csv(DATA_PATH)
+
+# Convert TotalCharges to numeric
+df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
+
+# Remove missing values
+df.dropna(inplace=True)
+
+# Encode target
+df["Churn"] = df["Churn"].map({"No": 0, "Yes": 1})
 
 # ============================================================
-# MODEL 1: Logistic Regression (baseline)
+# SELECT IMPORTANT FEATURES
 # ============================================================
-log_reg = LogisticRegression(max_iter=1000, random_state=42)
-log_reg.fit(X_train, y_train)
 
-y_pred_lr = log_reg.predict(X_test)
-y_proba_lr = log_reg.predict_proba(X_test)[:, 1]
+selected_features = [
+    "tenure",
+    "MonthlyCharges",
+    "TotalCharges",
+    "Contract",
+    "InternetService",
+    "PaymentMethod",
+    "OnlineSecurity",
+    "TechSupport"
+]
 
-print("\n=== Logistic Regression ===")
-print(classification_report(y_test, y_pred_lr))
-print("ROC-AUC:", roc_auc_score(y_test, y_proba_lr))
+X = df[selected_features]
+y = df["Churn"]
 
 # ============================================================
-# MODEL 2: Random Forest
+# TRAIN TEST SPLIT
 # ============================================================
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.20,
+    random_state=42,
+    stratify=y
+)
+
+print("Train Shape :", X_train.shape)
+print("Test Shape  :", X_test.shape)
+
+# ============================================================
+# PREPROCESSING
+# ============================================================
+
+numeric_features = [
+    "tenure",
+    "MonthlyCharges",
+    "TotalCharges"
+]
+
+categorical_features = [
+    "Contract",
+    "InternetService",
+    "PaymentMethod",
+    "OnlineSecurity",
+    "TechSupport"
+]
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        (
+            "num",
+            StandardScaler(),
+            numeric_features
+        ),
+        (
+            "cat",
+            OneHotEncoder(handle_unknown="ignore"),
+            categorical_features
+        )
+    ]
+)
+
+# ============================================================
+# RANDOM FOREST MODEL
+# ============================================================
+
 rf = RandomForestClassifier(
-    n_estimators=200,
-    max_depth=10,
-    min_samples_leaf=5,
-    random_state=42,
-    class_weight='balanced'  # handles churn imbalance
-)
-rf.fit(X_train, y_train)
-
-y_pred_rf = rf.predict(X_test)
-y_proba_rf = rf.predict_proba(X_test)[:, 1]
-
-print("\n=== Random Forest ===")
-print(classification_report(y_test, y_pred_rf))
-print("ROC-AUC:", roc_auc_score(y_test, y_proba_rf))
-
-# ============================================================
-# Compare + pick best model (by ROC-AUC)
-# ============================================================
-auc_lr = roc_auc_score(y_test, y_proba_lr)
-auc_rf = roc_auc_score(y_test, y_proba_rf)
-
-if auc_rf >= auc_lr:
-    best_model = rf
-    best_name = "Random Forest"
-else:
-    best_model = log_reg
-    best_name = "Logistic Regression"
-
-print(f"\n🏆 Best model: {best_name} (ROC-AUC: {max(auc_lr, auc_rf):.4f})")
-
-# ============================================================
-# Feature importance (Random Forest only)
-# ============================================================
-if best_name == "Random Forest":
-    importances = pd.Series(rf.feature_importances_, index=X_train.columns)
-    importances = importances.sort_values(ascending=False)
-    print("\nTop 10 features driving churn:")
-    print(importances.head(10))
-
-# ============================================================
-# Save the best model
-# ============================================================
-joblib.dump(best_model, os.path.join(MODEL_DIR, "churn_model.pkl"))
-joblib.dump(list(X_train.columns), os.path.join(MODEL_DIR, "feature_names.pkl"))
-print(f"\n✅ Saved {best_name} to model/churn_model.pkl")
-
-# ============================================================
-# THRESHOLD TUNING for Random Forest
-# ============================================================
-print("\n=== Threshold Tuning (Random Forest) ===")
-thresholds = [0.35, 0.4, 0.45, 0.5, 0.55, 0.6]
-
-for t in thresholds:
-    y_pred_t = (y_proba_rf >= t).astype(int)
-    prec = precision_score(y_test, y_pred_t)
-    rec = recall_score(y_test, y_pred_t)
-    f1 = f1_score(y_test, y_pred_t)
-    print(f"Threshold {t}: Precision={prec:.3f}  Recall={rec:.3f}  F1={f1:.3f}")
-
-# ============================================================
-# MODEL 2b: Random Forest (tuned)
-# ============================================================
-rf_tuned = RandomForestClassifier(
     n_estimators=300,
-    max_depth=8,
-    min_samples_leaf=10,
-    min_samples_split=20,
+    max_depth=10,
     random_state=42,
-    class_weight='balanced'
+    class_weight="balanced"
 )
-rf_tuned.fit(X_train, y_train)
 
-y_pred_rf2 = rf_tuned.predict(X_test)
-y_proba_rf2 = rf_tuned.predict_proba(X_test)[:, 1]
+pipeline = Pipeline(
+    steps=[
+        ("preprocessor", preprocessor),
+        ("classifier", rf)
+    ]
+)
 
-print("\n=== Random Forest (Tuned) ===")
-print(classification_report(y_test, y_pred_rf2))
-print("ROC-AUC:", roc_auc_score(y_test, y_proba_rf2))
+# ============================================================
+# TRAIN
+# ============================================================
+
+print("\nTraining Model...\n")
+
+pipeline.fit(X_train, y_train)
+
+# ============================================================
+# PREDICT
+# ============================================================
+
+predictions = pipeline.predict(X_test)
+
+probabilities = pipeline.predict_proba(X_test)[:, 1]
+
+# ============================================================
+# EVALUATION
+# ============================================================
+
+print("=" * 60)
+
+print("Classification Report\n")
+
+print(classification_report(y_test, predictions))
+
+print("=" * 60)
+
+accuracy = accuracy_score(y_test, predictions)
+
+roc = roc_auc_score(y_test, probabilities)
+
+print(f"Accuracy : {accuracy:.4f}")
+
+print(f"ROC AUC  : {roc:.4f}")
+
+print("\nConfusion Matrix")
+
+print(confusion_matrix(y_test, predictions))
+
+# ============================================================
+# FEATURE IMPORTANCE
+# ============================================================
+
+feature_names = pipeline.named_steps[
+    "preprocessor"
+].get_feature_names_out()
+
+feature_importance = pd.Series(
+    pipeline.named_steps[
+        "classifier"
+    ].feature_importances_,
+    index=feature_names
+)
+
+feature_importance = feature_importance.sort_values(
+    ascending=False
+)
+
+print("\nTop 10 Important Features\n")
+
+print(feature_importance.head(10))
+
+# ============================================================
+# SAVE PIPELINE
+# ============================================================
+
+joblib.dump(
+    pipeline,
+    os.path.join(
+        MODEL_DIR,
+        "churn_pipeline.pkl"
+    )
+)
+
+print("\nModel Saved Successfully!")
+
+print("Location : model/churn_pipeline.pkl")
